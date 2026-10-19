@@ -27,7 +27,8 @@
     "**/test_*.py",
     "**/*_spec.rb",
     "**/*Test.*",
-    "**/*Tests.*"
+    "**/*Tests.*",
+    "**/tests.rs"
   ],
   "freeGlobs": [
     "**/*.md",

@@ -158,6 +158,8 @@ test('detects common stacks', () => {
     [{ 'package.json': JSON.stringify({ scripts: { test: 'jest' } }), 'pnpm-lock.yaml': '' }, 'pnpm test'],
     [{ 'pyproject.toml': '[project]\nname="x"\n' }, 'pytest -q'],
     [{ 'Cargo.toml': '[package]\n' }, 'cargo test'],
+    [{ 'package.json': JSON.stringify({ scripts: { test: 'vitest run' } }), 'pnpm-lock.yaml': '', 'src-tauri/Cargo.toml': '[package]\n' },
+      'pnpm test && cargo test --manifest-path src-tauri/Cargo.toml'],
     [{ 'package.json': JSON.stringify({ scripts: { test: 'echo "Error: no test specified" && exit 1' } }) }, null],
     [{ 'README.md': 'nothing to detect' }, null],
   ];

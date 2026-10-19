@@ -33,7 +33,7 @@ const DEFAULTS = {
   testGlobs: [
     '**/test/**', '**/tests/**', '**/__tests__/**', '**/spec/**', '**/e2e/**', '**/__snapshots__/**',
     '**/*.test.*', '**/*.spec.*', '**/*_test.*', '**/*-test.*', '**/test_*.py', '**/*_spec.rb',
-    '**/*Test.*', '**/*Tests.*',
+    '**/*Test.*', '**/*Tests.*', '**/tests.rs',
   ],
   freeGlobs: ['**/*.md', '**/*.mdx', '**/*.rst', '**/*.adoc', 'docs/**', 'LICENSE*', '.gitignore', '.gitattributes', '.editorconfig'],
   guardGlobs: ['REVIEW.md'],
@@ -230,14 +230,14 @@ function changed(root, a, b) {
   return git(root, ['diff-tree', '-r', '-z', '--name-only', '--no-renames', a, b]).split('\0').filter(Boolean);
 }
 
-function runCheck(cwd, cfg, cmd) {
+function runCheck(cwd, cfg, cmd, env = {}) {
   const t0 = Date.now();
   const r = spawnSync('/bin/sh', ['-c', `{ ${cmd}\n} 2>&1`], {
     cwd,
     encoding: 'utf8',
     maxBuffer: 256 * 1024 * 1024,
     timeout: cfg.timeoutSec * 1000,
-    env: { ...process.env, CI: process.env.CI ?? '1', NO_COLOR: '1', FORCE_COLOR: '0' },
+    env: { ...process.env, CI: process.env.CI ?? '1', NO_COLOR: '1', FORCE_COLOR: '0', ...env },
   });
   return { cmd, exit: r.status ?? 1, ms: Date.now() - t0, out: (r.stdout || '') + (r.stderr || ''), timedOut: r.error?.code === 'ETIMEDOUT' };
 }
@@ -833,6 +833,7 @@ function audit(ctx, opt) {
 
 // Replay in a detached worktree: the user's checkout is never switched, and files that are not
 // in git (like node_modules) are absent there, so their setup must be declared, not assumed.
+// replaySetup sees $GW_ROOT, the checkout, so it can reuse caches instead of rebuilding them.
 function inWorktree(root, cfg, ref, fn) {
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-replay-'));
   const dir = path.join(parent, 'tree');
@@ -840,7 +841,7 @@ function inWorktree(root, cfg, ref, fn) {
     const add = gitRun(root, ['-c', 'core.hooksPath=/dev/null', 'worktree', 'add', '-q', '--detach', dir, ref]);
     if (add.code !== 0) return { error: `cannot check out ${ref.slice(0, 7)}: ${add.err.trim()}` };
     if (cfg.replaySetup) {
-      const setup = runCheck(dir, cfg, cfg.replaySetup);
+      const setup = runCheck(dir, cfg, cfg.replaySetup, { GW_ROOT: root });
       if (setup.exit !== 0 || setup.timedOut) return { error: `replaySetup failed (exit ${setup.exit}): ${tail(setup.out, 5)}` };
     }
     return fn(dir);

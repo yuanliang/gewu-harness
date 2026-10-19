@@ -80,6 +80,14 @@ function removeEmptyDirs(...rels) {
 }
 
 function detectVerify() {
+  const node = detectNodeVerify();
+  // A Tauri app keeps its Rust half in src-tauri/; green must cover both sides.
+  const tauri = has('src-tauri/Cargo.toml') ? 'cargo test --manifest-path src-tauri/Cargo.toml' : null;
+  if (node || tauri) return [node, tauri].filter(Boolean).join(' && ');
+  return detectOtherVerify();
+}
+
+function detectNodeVerify() {
   if (has('package.json')) {
     let script;
     try { script = JSON.parse(read('package.json')).scripts?.test; } catch { /* not JSON */ }
@@ -90,6 +98,10 @@ function detectVerify() {
       return 'npm test';
     }
   }
+  return null;
+}
+
+function detectOtherVerify() {
   if (['pyproject.toml', 'pytest.ini', 'setup.cfg', 'tox.ini'].some(has)) return has('uv.lock') ? 'uv run pytest -q' : 'pytest -q';
   if (has('go.mod')) return 'go test ./...';
   if (has('Cargo.toml')) return 'cargo test';

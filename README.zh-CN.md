@@ -53,6 +53,8 @@ git add -A -- .agents .claude .codex .cursor .github .gitignore .harness AGENTS.
 git commit -m "chore: install Gewu Harness"
 ```
 
+如果项目的格式化或 lint 工具会检查仓库里的所有文件（Biome、Prettier、ESLint），请把 `.harness/`、`.claude/`、`.codex/`、`.cursor/` 和 `.agents/` 排除在外；这些文件遵循 harness 自己的风格。
+
 如果用 Codex，先用 `/hooks` 审核并信任一次项目的 hooks。然后在项目里重启智能体，直接说你要做什么，例如：
 
 > 给订单接口加分页，保留旧接口兼容。
@@ -142,13 +144,13 @@ hooks 会在智能体的每一条写入路径上强制这些锁：编辑工具�
 
 | 字段 | 默认 | 含义 |
 |---|---|---|
-| `verify` | 自动识别 | 全量测试命令，退出码 0 为绿。可识别 npm、pnpm、yarn、bun、pytest、Go、Cargo、Mix、RSpec、Maven、Gradle、SwiftPM 和 Make |
+| `verify` | 自动识别 | 全量测试命令，退出码 0 为绿。可识别 npm、pnpm、yarn、bun、pytest、Go、Cargo（包括 Tauri 应用的 `src-tauri/`）、Mix、RSpec、Maven、Gradle、SwiftPM 和 Make。如果希望绿也覆盖 lint 和类型检查，就把它们串进来 |
 | `hosts` | 全部 | 要接入的智能体：`claude`、`codex`、`cursor`。用 `install.mjs --hosts` 修改 |
 | `language` | 取自系统语言 | 工作项模板的语言：`en` 或 `zh-CN` |
 | `enforce` | `strict` | `strict` 拦截；`warn` 只提醒智能体；`off` 关闭 hooks |
 | `gates` | `warn` | `strict` 时，`start` 要求所需文档已批准且未改动 |
 | `commit` | `true` | 只提交本循环涉及的文件，形成 `[red]` / `[green]` 提交 |
-| `replaySetup` | `null` | 准备重放用的 worktree，例如 `npm ci`；依赖不在 git 中时必须设置 |
+| `replaySetup` | `null` | 为每个重放用的 worktree 做准备，例如 `npm ci`；依赖不在 git 中时必须设置。`$GW_ROOT` 指向你的检出目录，可以借它复用缓存，例如 `ln -s "$GW_ROOT/target" target` |
 | `postEdit` | `null` | Claude Code：每次编辑后运行，例如 `npx prettier --write {file}` |
 | `testGlobs` / `freeGlobs` / `guardGlobs` | 见文件 | 把文件归类为测试、自由（文档）或额外的护栏；harness 自己的文件始终受保护 |
 

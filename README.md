@@ -53,6 +53,8 @@ git add -A -- .agents .claude .codex .cursor .github .gitignore .harness AGENTS.
 git commit -m "chore: install Gewu Harness"
 ```
 
+If a formatter or linter checks every file in the repository (Biome, Prettier, ESLint), exclude `.harness/`, `.claude/`, `.codex/`, `.cursor/` and `.agents/` from it; those files follow the harness's own style.
+
 In Codex, review and trust the project hooks once with `/hooks`. Then restart your agent in the project and say what you want, for example:
 
 > Add pagination to the orders API and keep the old endpoint working.
@@ -142,13 +144,13 @@ Errors carry a stable code (`E_NOT_RED`, `E_WRONG_REASON`, `E_TAMPER`, `E_REGRES
 
 | Key | Default | Meaning |
 |---|---|---|
-| `verify` | detected | Full-suite command; exit 0 is green. Detects npm, pnpm, yarn, bun, pytest, Go, Cargo, Mix, RSpec, Maven, Gradle, SwiftPM and Make |
+| `verify` | detected | Full-suite command; exit 0 is green. Detects npm, pnpm, yarn, bun, pytest, Go, Cargo (including a Tauri app's `src-tauri/`), Mix, RSpec, Maven, Gradle, SwiftPM and Make. Chain linters and type checks in if green should cover them |
 | `hosts` | all | Agents to wire up: `claude`, `codex`, `cursor`. Change with `install.mjs --hosts` |
 | `language` | from your locale | Language of the work-item templates: `en` or `zh-CN` |
 | `enforce` | `strict` | `strict` blocks; `warn` only tells the agent; `off` disables the hooks |
 | `gates` | `warn` | `strict` makes `start` require approved, unchanged documents |
 | `commit` | `true` | Make `[red]` / `[green]` commits of exactly the cycle's files |
-| `replaySetup` | `null` | Prepares replay worktrees, for example `npm ci`; required when dependencies live outside git |
+| `replaySetup` | `null` | Prepares each replay worktree, for example `npm ci`; required when dependencies live outside git. `$GW_ROOT` is your checkout, so setup can reuse caches, for example `ln -s "$GW_ROOT/target" target` |
 | `postEdit` | `null` | Claude Code: run after each edit, for example `npx prettier --write {file}` |
 | `testGlobs` / `freeGlobs` / `guardGlobs` | see file | Classify files as tests, free (docs) or extra guardrails; the harness's own files are always guarded |
 

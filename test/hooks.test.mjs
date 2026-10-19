@@ -54,6 +54,7 @@ test('red phase: source unlocked, tests frozen with a reopen hint', () => {
   assert.equal(p.write_('src/__tests__/a.js').decision, 'deny');
   assert.equal(p.write_('pkg/a_test.go').decision, 'deny');
   assert.equal(p.write_('tests/test_api.py').decision, 'deny');
+  assert.equal(p.write_('src-tauri/src/tests.rs').decision, 'deny', 'Rust test modules are tests too');
 });
 
 test('state and evidence are never hand-edited, even in a chore', () => {

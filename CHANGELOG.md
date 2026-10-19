@@ -16,6 +16,8 @@ Any coding agent can now use the harness. The rules, the stage playbooks and the
 - An `AGENTS.md` rulebook block and skills in `.agents/skills/`, read by Codex, Cursor and other agents that follow `AGENTS.md`.
 - `install.mjs --hosts claude,codex,cursor` chooses the agents to wire up, remembered in `.harness/config.json`. Dropping an agent removes exactly its files.
 - The installer prints the exact `git add` command for what it installed.
+- A Tauri app's Rust suite (`src-tauri/`) is part of the detected `verify`, and Rust test modules (`tests.rs`) count as tests.
+- `replaySetup` receives `$GW_ROOT`, the checkout, so replay worktrees can reuse dependencies and build caches.
 - Delivery commands (`git push`, `gh pr create`, `gh pr merge`, `gh release create`, `npm publish`) are caught by the guard for every agent, not only by Claude Code's permission rules.
 
 ### Changed

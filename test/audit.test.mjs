@@ -77,3 +77,12 @@ test('replay refuses to let missing dependencies pose as red', () => {
   p.git('commit', '-qm', 'configure replay setup');
   ok(p.gw('audit', '--base', 'main', '--replay'));
 });
+
+test('replay setup can reuse caches from the checkout through $GW_ROOT', () => {
+  const p = branchWithCycle();
+  p.write('node_modules/dep/index.js', 'export default 1;\n');
+  p.config({ replaySetup: 'test -f "$GW_ROOT/node_modules/dep/index.js" && ln -s "$GW_ROOT/node_modules" node_modules' });
+  p.git('add', '-A');
+  p.git('commit', '-qm', 'reuse dependencies in replay');
+  ok(p.gw('audit', '--base', 'main', '--replay'));
+});
