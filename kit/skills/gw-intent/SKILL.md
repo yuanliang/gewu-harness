@@ -4,11 +4,11 @@ description: SDLC stage 1, Plan. Turns an idea into intent.md with the user (pro
 argument-hint: "<idea>"
 ---
 
-# /gw-intent — capture the intent
+# gw-intent — capture the intent
 
 Idea: $ARGUMENTS
 
-Artifact: `docs/work/<id>/intent.md` · Gate: the user approves with `! .harness/gw approve intent`
+Artifact: `docs/work/<id>/intent.md` · Gate: the user approves by running `.harness/gw approve intent` (in Claude Code: `! .harness/gw approve intent`)
 
 1. `.harness/gw status`. Without a fitting work item: `.harness/gw new "<short title>" [--type feature|bug|incident|quick]`.
 2. Read the relevant code, docs and recent commits. **Write no code in this stage.**
@@ -18,6 +18,6 @@ Artifact: `docs/work/<id>/intent.md` · Gate: the user approves with `! .harness
    - Strong: "the 6th failed login from one IP within 60 s returns 429; attempts 1–5 are unaffected"
 5. Anything that cannot be a signal yet goes under open questions, with who answers it. Don't pretend to be certain.
 6. Before handing over, check: the problem states facts, not a solution; every signal could be disproved by a check that goes red; constraints are complete.
-7. Show the intent and ask the user to approve it with `! .harness/gw approve intent`. **You cannot approve it yourself.**
+7. Show the intent and ask the user to approve it by running `.harness/gw approve intent` themselves. **You cannot approve it yourself.**
 
-Next: a feature goes to `/gw-spec`; a bug goes to `/gw-fix`.
+Next: a feature goes to `gw-spec`; a bug goes to `gw-fix`.

@@ -4,8 +4,8 @@
 
 | Version | Supported |
 |---|---|
-| 0.6.x | Yes |
-| < 0.6 | No |
+| 0.7.x | Yes |
+| < 0.7 | No |
 
 ## Reporting a vulnerability
 
@@ -19,7 +19,7 @@ What Gewu does and does not protect against helps you judge whether something is
 
 **In scope**
 
-- An agent getting past a phase lock, the test freeze or an approval gate through normal tool use (Edit, Write, ordinary shell commands).
+- An agent with hook support (Claude Code, Codex, Cursor) getting past a phase lock, the test freeze or an approval gate through normal tool use: its edit tools, patches or ordinary shell commands.
 - Evidence that `gw audit --replay` accepts although it does not match what actually ran.
 - The installer or `--uninstall` changing or deleting files it does not own.
 
@@ -27,5 +27,5 @@ What Gewu does and does not protect against helps you judge whether something is
 
 - **Gewu is not a sandbox.** Hooks and snapshots are guardrails against everyday shortcuts, not against a deliberately malicious executor or scripts written to bypass them.
 - **Commands from the project run with your privileges.** `verify`, `--check`, `replaySetup` and `postEdit` are shell commands read from the project's configuration. Install the harness only in repositories whose configuration you trust, as you would before running their test suite.
-- Agents other than Claude Code, which follow the rules by instruction only.
-- Bugs in Claude Code, Node.js or Git themselves.
+- Agents without hook support, which follow the rules by instruction only. The evidence checks still apply to them.
+- Bugs in the agents themselves, Node.js or Git.

@@ -1,6 +1,11 @@
 {
   "verify": null,
   "language": "en",
+  "hosts": [
+    "claude",
+    "codex",
+    "cursor"
+  ],
   "workDir": "docs/work",
   "enforce": "strict",
   "gates": "warn",
@@ -9,16 +14,33 @@
   "replaySetup": null,
   "postEdit": null,
   "testGlobs": [
-    "**/test/**", "**/tests/**", "**/__tests__/**", "**/spec/**", "**/e2e/**", "**/__snapshots__/**",
-    "**/*.test.*", "**/*.spec.*", "**/*_test.*", "**/*-test.*", "**/test_*.py", "**/*_spec.rb",
-    "**/*Test.*", "**/*Tests.*"
+    "**/test/**",
+    "**/tests/**",
+    "**/__tests__/**",
+    "**/spec/**",
+    "**/e2e/**",
+    "**/__snapshots__/**",
+    "**/*.test.*",
+    "**/*.spec.*",
+    "**/*_test.*",
+    "**/*-test.*",
+    "**/test_*.py",
+    "**/*_spec.rb",
+    "**/*Test.*",
+    "**/*Tests.*"
   ],
   "freeGlobs": [
-    "**/*.md", "**/*.mdx", "**/*.rst", "**/*.adoc", "docs/**",
-    "LICENSE*", ".gitignore", ".gitattributes", ".editorconfig"
+    "**/*.md",
+    "**/*.mdx",
+    "**/*.rst",
+    "**/*.adoc",
+    "docs/**",
+    "LICENSE*",
+    ".gitignore",
+    ".gitattributes",
+    ".editorconfig"
   ],
   "guardGlobs": [
-    ".harness/**", ".claude/settings.json", ".claude/settings.local.json",
-    ".claude/skills/gw-*/**", ".claude/agents/gw-*", ".github/workflows/gw-*", "REVIEW.md"
+    "REVIEW.md"
   ]
 }

@@ -5,7 +5,7 @@ disable-model-invocation: true
 argument-hint: "[base branch, default main]"
 ---
 
-# /gw-ship — prepare the release, stop at the production gate
+# gw-ship — prepare the release, stop at the production gate
 
 > The agent may act up to the production gate and never past it.
 
@@ -18,5 +18,5 @@ argument-hint: "[base branch, default main]"
    - a **traceability matrix**: `R# → C# → test → red commit (sha) → green`, taken from each work item's evidence.md
    - chores and reopens, each with its reason
    - risks, rollback, and who needs to approve
-3. Show the user the exact commands (`git push -u origin <branch>`, `gh pr create …`) and the description. **Run them only after the user explicitly agrees.** The harness asks for confirmation on these commands as well.
+3. Show the user the exact commands (`git push -u origin <branch>`, `gh pr create …`) and the description. **Run them only after the user explicitly agrees.** The harness also asks the user before these commands run, or blocks them where the agent cannot ask.
 4. Do not merge and do not deploy. Tell the user that merging needs a code owner's approval and that production needs its named owner.

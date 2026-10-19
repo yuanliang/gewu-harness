@@ -37,7 +37,7 @@ test('community health files are present', () => {
 test('newcomers learn requirements, status, adoption and removal before installing', () => {
   for (const rel of ['README.md', 'README.zh-CN.md']) {
     const readme = read(rel);
-    for (const fact of [/macOS/, /Linux/, /WSL/, /Claude Code[^\n]*2\.1\.295/, /0\.x/, /git commit/, /install\.mjs --uninstall/]) assert.match(readme, fact, `${rel}: ${fact}`);
+    for (const fact of [/macOS/, /Linux/, /WSL/, /Claude Code[^\n]*2\.1\.295/, /0\.x/, /git commit/, /install\.mjs --uninstall/, /Codex/, /Cursor/, /AGENTS\.md/, /--hosts/]) assert.match(readme, fact, `${rel}: ${fact}`);
   }
 });
 
@@ -45,7 +45,7 @@ test('the core stays lean: one small runtime, a one-page rulebook, no dependenci
   const runtime = fs.readdirSync(path.join(ROOT, 'kit/.harness')).filter((f) => f.endsWith('.mjs'));
   const lines = runtime.reduce((n, f) => n + read(`kit/.harness/${f}`).split('\n').length, 0);
   assert.ok(lines <= 1600, `kit runtime is ${lines} lines`);
-  assert.ok(read('kit/.harness/CLAUDE.md').split('\n').length <= 60, 'agent rulebook fits on one page');
+  assert.ok(read('kit/.harness/RULES.md').split('\n').length <= 60, 'agent rulebook fits on one page');
   const p = pkg();
   assert.equal(Object.keys({ ...p.dependencies, ...p.devDependencies }).length, 0);
 });

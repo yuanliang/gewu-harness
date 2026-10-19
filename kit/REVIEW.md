@@ -10,7 +10,7 @@ Humans focus on intent and risk. Leave mechanical checks to `gw audit` and CI.
 - [ ] Each red failed **for the right reason**: the predicted `--expect` matched, and an adopted test really describes the behavior.
 - [ ] Every reopen has a good reason, not "make the test easier to pass".
 - [ ] No chore hides a behavior change. Read its diff line by line.
-- [ ] Changes to guardrail files (`.harness/**`, `.claude/settings*.json`, this file) were confirmed by a human.
+- [ ] Changes to guardrail files (`.harness/**`, agent hook configs, `gw-*` skills and agents, this file) were confirmed by a human.
 
 ## 1. False greens
 

@@ -65,9 +65,16 @@ test('state and evidence are never hand-edited, even in a chore', () => {
 
 test('guardrail files need a human to approve the edit', () => {
   const p = inPhase('chore');
-  assert.equal(p.write_('.harness/config.json').decision, 'ask');
-  assert.equal(p.write_('.claude/settings.json').decision, 'ask');
-  assert.equal(p.write_('REVIEW.md').decision, 'ask');
+  for (const rel of ['.harness/config.json', '.claude/settings.json', '.codex/hooks.json', '.cursor/hooks.json', '.agents/skills/gw-next/SKILL.md', 'REVIEW.md']) {
+    assert.equal(p.write_(rel).decision, 'ask', rel);
+  }
+});
+
+test("the harness's own files stay guarded even if guardGlobs is narrowed", () => {
+  const p = project({ config: { guardGlobs: [] } });
+  ok(p.gw('chore', 'tidy'));
+  assert.equal(p.write_('.harness/gw.mjs').decision, 'ask');
+  assert.equal(p.write_('.codex/hooks.json').decision, 'ask');
 });
 
 test('the agent cannot mark a document approved', () => {
@@ -133,6 +140,12 @@ test('enforce=warn allows but tells the agent what rule it broke', () => {
   assert.match(d.context, /gw start/);
 });
 
+test('enforce=warn never softens a hard denial hiding in the same command', () => {
+  const p = project({ config: { enforce: 'warn' } });
+  assert.equal(p.bash('rm src/math.mjs .harness/state.json').decision, 'deny');
+  assert.equal(p.bash('rm .harness/state.json src/math.mjs').decision, 'deny');
+});
+
 test('a broken guard fails closed instead of letting edits through', () => {
   const p = inPhase('idle');
   p.write('.harness/config.json', '{ not json');
@@ -148,6 +161,71 @@ test('settings ask before external actions and gate decisions, even in bypass mo
     'Bash(git push)', 'Bash(git push *)', 'Bash(gh pr merge *)', 'Bash(npm publish *)',
     'Bash(.harness/gw chore *)', 'Bash(.harness/gw approve *)', 'Edit(/.harness/**)', 'Edit(/.claude/settings.json)', 'Edit(/REVIEW.md)',
   ]) assert.ok(ask.includes(rule), rule);
+});
+
+test('bash: delivery actions ask the user', () => {
+  const p = inPhase('idle');
+  for (const cmd of ['git push origin main', 'gh pr merge 3 --squash', 'npm publish']) assert.equal(p.bash(cmd).decision, 'ask', cmd);
+  assert.equal(p.bash('git pull origin main').decision, 'allow');
+});
+
+// ── Codex: Claude's hook protocol, but edits arrive as apply_patch text and "ask" does not exist.
+const patch = (file, body = '+x', op = 'Update') => `*** Begin Patch\n*** ${op} File: ${file}\n@@\n${body}\n*** End Patch\n`;
+const codex = (p, tool_name, command) =>
+  p.hook('pre-tool', { hook_event_name: 'PreToolUse', tool_name, tool_input: { command } }, 'codex').json?.hookSpecificOutput;
+
+test('codex: apply_patch is judged by the files it touches', () => {
+  const p = inPhase('test');
+  assert.equal(codex(p, 'apply_patch', patch('test/mul.test.mjs')), undefined, 'tests are writable in TEST');
+  const src = codex(p, 'apply_patch', patch('src/math.mjs'));
+  assert.equal(src.permissionDecision, 'deny');
+  assert.match(src.permissionDecisionReason, /gw red/);
+  assert.equal(codex(p, 'apply_patch', patch('src/new.mjs', '+x', 'Add')).permissionDecision, 'deny');
+  assert.equal(codex(p, 'Bash', `apply_patch <<'EOF'\n${patch('src/math.mjs')}EOF`).permissionDecision, 'deny', 'patches through the shell too');
+});
+
+test('codex: anything that needs the user is denied with a reason, since Codex cannot ask', () => {
+  const p = inPhase('idle');
+  for (const [tool, command] of [['Bash', 'git push origin main'], ['Bash', '.harness/gw chore "rename"'], ['apply_patch', patch('docs/work/x/plan.md', '+status: approved')]]) {
+    const d = codex(p, tool, command);
+    assert.equal(d.permissionDecision, 'deny', command);
+    assert.match(d.permissionDecisionReason, /user/i, command);
+  }
+});
+
+test('codex: stop and session start speak the Claude-compatible protocol', () => {
+  const p = inPhase('impl');
+  p.write('src/math.mjs', 'export const add = (a, b) => a + b;\nexport const mul = () => 0;\n');
+  assert.equal(p.hook('stop', { stop_hook_active: false }, 'codex').json?.decision, 'block');
+  assert.match(p.hook('session-start', { source: 'startup' }, 'codex').stdout, /gw green/);
+});
+
+// ── Cursor: its own permission protocol; only shell commands can ask the user.
+const cursor = (p, input) => p.hook('pre-tool', input, 'cursor').json;
+
+test('cursor: file writes answer with a permission', () => {
+  const p = inPhase('test');
+  assert.deepEqual(cursor(p, { hook_event_name: 'preToolUse', tool_name: 'Write', tool_input: { file_path: p.path('test/mul.test.mjs') } }), { permission: 'allow' });
+  const src = cursor(p, { hook_event_name: 'preToolUse', tool_name: 'Write', tool_input: { file_path: p.path('src/math.mjs') } });
+  assert.equal(src.permission, 'deny');
+  assert.match(src.agent_message, /gw red/);
+  assert.equal(cursor(p, { hook_event_name: 'preToolUse', tool_name: 'Delete', tool_input: { path: p.path('src/math.mjs') } }).permission, 'deny');
+});
+
+test('cursor: shell commands are guarded, and delivery asks the user', () => {
+  const p = inPhase('impl');
+  const shell = (command) => cursor(p, { hook_event_name: 'beforeShellExecution', command, cwd: p.dir }).permission;
+  assert.equal(shell('git push origin main'), 'ask');
+  assert.equal(shell(`sed -i '' 's/6/5/' test/mul.test.mjs`), 'deny');
+  assert.equal(shell('node --test'), 'allow');
+});
+
+test('cursor: stop follows up once, and session start adds context', () => {
+  const p = inPhase('impl');
+  p.write('src/math.mjs', 'export const add = (a, b) => a + b;\nexport const mul = () => 0;\n');
+  assert.match(p.hook('stop', { status: 'completed', loop_count: 0 }, 'cursor').json?.followup_message ?? '', /gw green/);
+  assert.equal(p.hook('stop', { status: 'completed', loop_count: 1 }, 'cursor').json?.followup_message, undefined);
+  assert.match(p.hook('session-start', {}, 'cursor').json?.additional_context ?? '', /RED/);
 });
 
 test('stop: blocks once when changes since the last proof are unverified', () => {

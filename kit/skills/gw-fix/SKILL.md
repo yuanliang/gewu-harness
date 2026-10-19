@@ -4,7 +4,7 @@ description: The way to fix a bug - first a test that fails with the same sympto
 argument-hint: "<bug description>"
 ---
 
-# /gw-fix — reproduce first, then fix
+# gw-fix — reproduce first, then fix
 
 Bug: $ARGUMENTS
 
@@ -20,4 +20,4 @@ Bug: $ARGUMENTS
    - A test that already fails with this symptom ("CI is red") *is* the check. Don't edit it; adopt it: `.harness/gw red --adopt <test file> --expect "<symptom>"`.
 6. Fix the code (the test is frozen), then `.harness/gw green`. The full suite guards against regressions.
 7. `.harness/gw done`.
-8. Ask once: where else could the same defect live? If anywhere, open more cycles (B2, B3…). If this is the second time Claude made this mistake, add the correction to the project's CLAUDE.md.
+8. Ask once: where else could the same defect live? If anywhere, open more cycles (B2, B3…). If an agent has made this mistake twice, add the correction to the project's agent instructions (CLAUDE.md or AGENTS.md).

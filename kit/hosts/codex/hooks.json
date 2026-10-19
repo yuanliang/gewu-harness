@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/.harness/gw.mjs\" hook session-start --host codex", "timeout": 15 }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch",
+        "hooks": [
+          { "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/.harness/gw.mjs\" hook pre-tool --host codex", "timeout": 15 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/.harness/gw.mjs\" hook stop --host codex", "timeout": 30 }
+        ]
+      }
+    ]
+  }
+}

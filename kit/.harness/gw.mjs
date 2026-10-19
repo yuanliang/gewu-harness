@@ -36,11 +36,14 @@ const DEFAULTS = {
     '**/*Test.*', '**/*Tests.*',
   ],
   freeGlobs: ['**/*.md', '**/*.mdx', '**/*.rst', '**/*.adoc', 'docs/**', 'LICENSE*', '.gitignore', '.gitattributes', '.editorconfig'],
-  guardGlobs: [
-    '.harness/**', '.claude/settings.json', '.claude/settings.local.json', '.claude/skills/gw-*/**',
-    '.claude/agents/gw-*', '.github/workflows/gw-*', 'REVIEW.md',
-  ],
+  guardGlobs: ['REVIEW.md'],
 };
+
+// The harness's own files are always guardrails; config.guardGlobs can only add to them.
+const OWNED_GUARDS = [
+  '.harness/**', '.claude/settings.json', '.claude/settings.local.json', '.codex/hooks.json', '.cursor/hooks.json',
+  '.claude/skills/gw-*/**', '.agents/skills/gw-*/**', '.claude/agents/gw-*', '.github/workflows/gw-*',
+];
 
 const REQUIRED_DOCS = { feature: ['intent', 'spec', 'plan'], bug: ['intent'], incident: ['intent'], quick: [] };
 const APPROVED = { intent: 'accepted', spec: 'approved', plan: 'approved' };
@@ -170,7 +173,7 @@ const isEvidence = (rel, cfg) => rel.startsWith(cfg.workDir + '/') && /\/evidenc
 // protected > guard > test > free > source
 function classify(rel, cfg) {
   if (rel === STATE || rel.startsWith(TMP + '/') || isEvidence(rel, cfg)) return 'protected';
-  if (matches(rel, cfg.guardGlobs)) return 'guard';
+  if (matches(rel, OWNED_GUARDS) || matches(rel, cfg.guardGlobs)) return 'guard';
   if (matches(rel, cfg.testGlobs)) return 'test';
   if (matches(rel, cfg.freeGlobs)) return 'free';
   return 'source';
@@ -367,7 +370,7 @@ function newWork(root, cfg, title, type) {
 function ensureWork(ctx, title) {
   if (ctx.state.work && fs.existsSync(workDir(ctx.root, ctx.cfg, ctx.state.work))) return;
   ctx.state.work = newWork(ctx.root, ctx.cfg, title, 'quick');
-  say(paint(90, `Created quick work item ${ctx.cfg.workDir}/${ctx.state.work}/ (fill in its intent later with /gw-intent).`));
+  say(paint(90, `Created quick work item ${ctx.cfg.workDir}/${ctx.state.work}/ (fill in its intent later with the gw-intent skill).`));
 }
 
 function gateProblems(root, cfg, work) {
@@ -526,7 +529,7 @@ const commands = {
     ctx.state.work = newWork(ctx.root, ctx.cfg, title, type);
     saveState(ctx.root, ctx.state);
     say(`Created ${ctx.cfg.workDir}/${ctx.state.work}/intent.md (${type}, status: draft).`,
-      `Next: complete the intent (/gw-intent), then ask the user to approve it: ! ${GW} approve intent`);
+      `Next: complete the intent (gw-intent skill), then ask the user to approve it by running: ${GW} approve intent`);
   },
 
   use(ctx, { pos }) {
@@ -545,7 +548,7 @@ const commands = {
     needPhase(ctx, ['idle']);
     const { root, cfg, state } = ctx;
     const gaps = state.work && cfg.gates !== 'off' && fs.existsSync(workDir(root, cfg, state.work)) ? gateProblems(root, cfg, state.work) : [];
-    if (gaps.length && cfg.gates === 'strict') fail('E_GATE', `Human gate not passed:\n  - ${gaps.join('\n  - ')}\nShow the document to the user; they approve with: ! ${GW} approve <intent|spec|plan>`);
+    if (gaps.length && cfg.gates === 'strict') fail('E_GATE', `Human gate not passed:\n  - ${gaps.join('\n  - ')}\nShow the document to the user; they approve it by running: ${GW} approve <intent|spec|plan>`);
     let baseline = null;
     if (!opt.check) {
       // Without a targeted check, red is judged on the full suite, so it must start green.
@@ -886,40 +889,58 @@ function claudeVersion() {
 
 function doctor({ root, cfg }, opt) {
   const read = (rel) => (fs.existsSync(path.join(root, rel)) ? fs.readFileSync(path.join(root, rel), 'utf8') : '');
-  let settings = {};
-  try { settings = JSON.parse(read('.claude/settings.json') || '{}'); } catch { /* reported below */ }
-  const wired = (ev) => (settings.hooks?.[ev] ?? []).some((g) => (g.hooks ?? []).some((h) => h.command?.includes('.harness/gw.mjs')));
+  const has = (rel) => fs.existsSync(path.join(root, rel));
+  const wired = (file, events) => {
+    let s = {};
+    try { s = JSON.parse(read(file) || '{}'); } catch { /* reported as not wired */ }
+    return events.every((ev) => (s.hooks?.[ev] ?? []).some((g) => (g.hooks ?? [g]).some((h) => h.command?.includes('.harness/gw.mjs'))));
+  };
+  const hosts = cfg.hosts ?? ['claude'];
   const checks = [
     [`Node ≥ 18 (found ${process.versions.node})`, Number(process.versions.node.split('.')[0]) >= 18],
     ['git repository', isGitRepo(root)],
     [`verify = ${cfg.verify ?? 'not set'}`, !!cfg.verify, `set "verify" in ${CONFIG}`],
-    ['hooks wired: PreToolUse · PostToolUse · Stop · SessionStart', ['PreToolUse', 'PostToolUse', 'Stop', 'SessionStart'].every(wired), 'reinstall the harness'],
-    ['CLAUDE.md imports @.harness/CLAUDE.md', /^@\.harness\/CLAUDE\.md$/m.test(read('CLAUDE.md')), 'add the line @.harness/CLAUDE.md to CLAUDE.md'],
+    ...(hosts.includes('claude') ? [
+      ['Claude Code hooks wired (.claude/settings.json)', wired('.claude/settings.json', ['PreToolUse', 'PostToolUse', 'Stop', 'SessionStart']), 'reinstall the harness'],
+      ['CLAUDE.md imports @.harness/RULES.md', /^@\.harness\/RULES\.md$/m.test(read('CLAUDE.md')), 'add the line @.harness/RULES.md to CLAUDE.md'],
+      ['skills in .claude/skills', has('.claude/skills/gw-next/SKILL.md')],
+    ] : []),
+    ...(hosts.includes('codex') ? [['Codex hooks wired (.codex/hooks.json; trust them once with /hooks in Codex)', wired('.codex/hooks.json', ['PreToolUse', 'Stop', 'SessionStart']), 'reinstall the harness']] : []),
+    ...(hosts.includes('cursor') ? [['Cursor hooks wired (.cursor/hooks.json)', wired('.cursor/hooks.json', ['preToolUse', 'beforeShellExecution', 'stop', 'sessionStart']), 'reinstall the harness']] : []),
+    ...(hosts.some((h) => h !== 'claude') ? [
+      ['AGENTS.md carries the rulebook', read('AGENTS.md').includes('<!-- gewu:rules -->'), 'reinstall the harness'],
+      ['skills in .agents/skills', has('.agents/skills/gw-next/SKILL.md')],
+    ] : []),
     ['.gitignore ignores .harness/state.json', /^\.harness\/state\.json$/m.test(read('.gitignore'))],
-    ['skills /gw-* installed', fs.existsSync(path.join(root, '.claude/skills/gw-next/SKILL.md'))],
-    ['review policy REVIEW.md', fs.existsSync(path.join(root, 'REVIEW.md'))],
+    ['review policy REVIEW.md', has('REVIEW.md')],
   ];
   if (opt.run && cfg.verify) {
     const res = runCheck(root, cfg, cfg.verify);
     checks.push([`verify runs and passes (exit ${res.exit})`, res.exit === 0]);
   }
   for (const [label, okay, hint] of checks) say(`${okay ? paint(32, '✓') : paint(31, '✗')} ${label}${!okay && hint ? paint(90, `  → ${hint}`) : ''}`);
-  const v = claudeVersion();
-  const recent = v && atLeast(v, MIN_CLAUDE);
-  if (!v) say(`${paint(33, '!')} Claude Code not found on PATH (hooks need ${MIN_CLAUDE.join('.')} or later)`);
-  else say(`${recent ? paint(32, '✓') : paint(33, '!')} Claude Code ${v.join('.')}${recent ? '' : paint(90, `  → update to ${MIN_CLAUDE.join('.')}+ so failing guards block instead of passing silently`)}`);
+  if (hosts.includes('claude')) {
+    const v = claudeVersion();
+    const recent = v && atLeast(v, MIN_CLAUDE);
+    if (!v) say(`${paint(33, '!')} Claude Code not found on PATH (its hooks need ${MIN_CLAUDE.join('.')} or later)`);
+    else say(`${recent ? paint(32, '✓') : paint(33, '!')} Claude Code ${v.join('.')}${recent ? '' : paint(90, `  → update to ${MIN_CLAUDE.join('.')}+ so failing guards block instead of passing silently`)}`);
+  }
   if (checks.some(([, okay]) => !okay)) process.exitCode = 1;
 }
 
 // ───────────────────────────── hooks ─────────────────────────────
 
-function emit(verdict, cfg) {
-  if (!verdict) return;
-  if (cfg.enforce === 'warn' && verdict.decision === 'deny' && !verdict.hard) {
-    return say(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: `⚠ [gw warn mode] ${verdict.reason}` } }));
-  }
-  say(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: verdict.decision, permissionDecisionReason: verdict.reason } }));
-}
+// One decision procedure, three wire formats. Claude Code and Codex share a protocol (Codex cannot
+// pause to ask the user); Cursor answers with a permission object.
+
+const PATH_KEYS = ['file_path', 'notebook_path', 'path', 'target_file', 'filePath'];
+const TEXT_KEYS = ['content', 'contents', 'new_string', 'code_edit', 'text'];
+const DELIVERY = [['git', 'push'], ['gh', 'pr', 'create'], ['gh', 'pr', 'merge'], ['gh', 'release', 'create'], ['npm', 'publish']];
+const NEEDS_USER = '\nThis agent cannot pause to ask, so the action is blocked: stop and ask the user to do it themselves.';
+
+// hard deny > deny > ask > a warn-mode note, so no combination can soften a hard denial.
+const rank = (v) => (!v ? 0 : v.warn ? 1 : v.decision === 'ask' ? 2 : v.hard ? 4 : 3);
+const strongest = (a, b) => (rank(b) > rank(a) ? b : a);
 
 function editVerdict(cat, state, rel) {
   if (cat === 'protected') return { decision: 'deny', hard: true, reason: `⛔ ${rel} is maintained by gw (state / evidence) and cannot be edited by hand. Use ${GW} commands.` };
@@ -928,16 +949,36 @@ function editVerdict(cat, state, rel) {
   return PHASE[state.phase].locked.includes(cat) ? { decision: 'deny', reason: LOCKED_BECAUSE[state.phase](rel) } : null;
 }
 
-function newText(tool, ti) {
-  if (tool === 'Write') return ti.content ?? '';
-  if (tool === 'Edit') return ti.new_string ?? '';
-  if (tool === 'MultiEdit') return (ti.edits ?? []).map((e) => e.new_string ?? '').join('\n');
-  return '';
+const gateDenied = (rel) => {
+  const doc = path.basename(rel, '.md');
+  return { decision: 'deny', hard: true, reason: `⛔ Human gate: you cannot mark ${rel} as approved. Show it to the user; they approve it by running ${GW} approve ${doc} (in Claude Code: ! ${GW} approve ${doc}).` };
+};
+
+const isGateFlip = (cfg, rel, text) => rel.startsWith(cfg.workDir + '/') && /\/(intent|spec|plan)\.md$/.test(rel)
+  && /^\s*(status:\s*(accepted|approved)\b|approved_(sha|by|at):)/m.test(text);
+
+// Codex patches name their files in the patch text, whether sent as apply_patch or through the shell.
+function parsePatch(patch) {
+  const files = [...patch.matchAll(/^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+)$/gm)].map((m) => m[1].trim());
+  return { files, text: patch.split('\n').filter((l) => l.startsWith('+')).map((l) => l.slice(1)).join('\n') };
 }
 
-function isGateFlip(cfg, rel, tool, ti) {
-  if (!rel.startsWith(cfg.workDir + '/') || !/\/(intent|spec|plan)\.md$/.test(rel)) return false;
-  return /^\s*(status:\s*(accepted|approved)\b|approved_(sha|by|at):)/m.test(newText(tool, ti));
+// Reduce any host's tool call to the files it writes (with their new text) or a shell command.
+function toolCall(input) {
+  const ti = input.tool_input ?? {};
+  if (input.hook_event_name === 'beforeShellExecution') return { command: input.command ?? '' };
+  if (['Bash', 'Shell'].includes(input.tool_name)) return { command: ti.command ?? '' };
+  if (input.tool_name === 'apply_patch') return parsePatch(String(ti.command ?? ''));
+  if (input.tool_name === 'MultiEdit') return { files: [ti.file_path], text: (ti.edits ?? []).map((e) => e.new_string ?? '').join('\n') };
+  const file = PATH_KEYS.map((k) => ti[k]).find(Boolean);
+  return { files: file ? [file] : [], text: TEXT_KEYS.map((k) => ti[k]).filter((v) => typeof v === 'string').join('\n') };
+}
+
+// The project's enforce mode: off lets everything through, warn turns soft denials into notes.
+function enforced(cfg, verdict) {
+  if (!verdict || cfg.enforce === 'off') return null;
+  if (cfg.enforce === 'warn' && verdict.decision === 'deny' && !verdict.hard && !verdict.warn) return { ...verdict, warn: true, reason: `⚠ [gw warn mode] ${verdict.reason}` };
+  return verdict;
 }
 
 // A small shell lexer: enough to find write targets in everyday commands.
@@ -1056,55 +1097,71 @@ function writeTargets(seg, cwd) {
   return targets;
 }
 
-function gwSubcommand(seg) {
-  const w = words(seg);
+function gwSubcommand(w) {
   if (path.basename(w[0] ?? '') === 'gw') return w[1];
   if (path.basename(w[0] ?? '') === 'node' && path.basename(w[1] ?? '') === 'gw.mjs') return w[2];
   return null;
 }
 
-function preBash(input) {
-  const cwd = realish(input.cwd || process.cwd());
-  const root = findRoot(cwd);
-  if (!root) return;
-  const cfg = loadConfig(root);
-  if (cfg.enforce === 'off') return;
-  const state = loadState(root);
-  const segs = lex(input.tool_input?.command ?? '');
-  for (const seg of segs) {
-    const sub = gwSubcommand(seg);
-    if (sub === 'chore') return emit({ decision: 'ask', reason: '🛡 A chore lifts red-before-green for a non-behavioral change. The user confirms it.' }, cfg);
-    if (sub === 'approve') return emit({ decision: 'ask', reason: '🛡 Human gate: only the user approves intent, spec and plan.' }, cfg);
+function judgeFiles(files, text, cwd) {
+  let verdict = null;
+  for (const file of files) {
+    const abs = realish(path.resolve(cwd, file));
+    const root = findRoot(path.dirname(abs));
+    const rel = root && toRel(root, abs);
+    if (!rel) continue;
+    const cfg = loadConfig(root);
+    const cat = classify(rel, cfg);
+    verdict = strongest(verdict, enforced(cfg, cat !== 'protected' && isGateFlip(cfg, rel, text) ? gateDenied(rel) : editVerdict(cat, loadState(root), rel)));
   }
-  for (const seg of segs) {
+  return verdict;
+}
+
+function judgeShell(command, cwd) {
+  const root = findRoot(cwd);
+  if (!root) return null;
+  const cfg = loadConfig(root);
+  const state = loadState(root);
+  let verdict = null;
+  if (command.includes('*** Begin Patch')) {
+    const { files, text } = parsePatch(command);
+    verdict = judgeFiles(files, text, cwd);
+  }
+  for (const seg of lex(command)) {
+    const w = words(seg);
+    const sub = gwSubcommand(w);
+    if (sub === 'chore') verdict = strongest(verdict, { decision: 'ask', reason: '🛡 A chore lifts red-before-green for a non-behavioral change. The user confirms it.' });
+    if (sub === 'approve') verdict = strongest(verdict, { decision: 'ask', reason: '🛡 Human gate: only the user approves intent, spec and plan.' });
+    if (DELIVERY.some((d) => d.every((x, i) => w[i] === x))) verdict = strongest(verdict, { decision: 'ask', reason: "🛡 Push, PR, merge and release are the user's decision." });
     for (const t of writeTargets(seg, cwd)) {
       const rel = toRel(root, realish(path.resolve(cwd, t)));
       if (!rel) continue;
       const cat = classify(rel, cfg);
-      if (cat === 'guard') return emit({ decision: 'deny', hard: true, reason: `⛔ ${rel} is a guardrail file and cannot be rewritten from the shell. Use the Edit tool, which asks the user.` }, cfg);
-      const v = editVerdict(cat, state, rel);
-      if (v) return emit({ ...v, reason: `${v.reason}\n(Shell write blocked. To only read the file, use Read or Grep.)` }, cfg);
+      const v = cat === 'guard'
+        ? { decision: 'deny', hard: true, reason: `⛔ ${rel} is a guardrail file and cannot be rewritten from the shell. Use the Edit tool (your agent's file editor), which asks the user.` }
+        : editVerdict(cat, state, rel);
+      if (v) verdict = strongest(verdict, { ...v, reason: `${v.reason}\n(Shell write blocked. To only read the file, use your read or search tool.)` });
     }
   }
+  return enforced(cfg, verdict);
 }
 
-function hookPreTool(input) {
-  if (input.tool_name === 'Bash') return preBash(input);
-  const ti = input.tool_input ?? {};
-  const file = ti.file_path || ti.notebook_path;
-  if (!file) return;
-  const abs = realish(path.resolve(input.cwd || process.cwd(), file));
-  const root = findRoot(path.dirname(abs));
-  if (!root) return;
-  const cfg = loadConfig(root);
-  if (cfg.enforce === 'off') return;
-  const rel = toRel(root, abs);
-  if (!rel) return;
-  const cat = classify(rel, cfg);
-  if (cat !== 'protected' && isGateFlip(cfg, rel, input.tool_name, ti)) {
-    return emit({ decision: 'deny', hard: true, reason: `⛔ Human gate: you cannot mark ${rel} as approved. Show it to the user; they approve it by running: ! ${GW} approve ${path.basename(rel, '.md')}` }, cfg);
+function respond(host, event, verdict) {
+  const canAsk = host === 'claude' || (host === 'cursor' && event === 'beforeShellExecution');
+  const v = verdict?.decision === 'ask' && !canAsk ? { ...verdict, decision: 'deny', reason: verdict.reason + NEEDS_USER } : verdict;
+  if (host === 'cursor') {
+    if (!v || v.warn) return say(JSON.stringify(v ? { permission: 'allow', agent_message: v.reason } : { permission: 'allow' }));
+    return say(JSON.stringify({ permission: v.decision, user_message: v.reason, agent_message: v.reason }));
   }
-  return emit(editVerdict(cat, loadState(root), rel), cfg);
+  if (!v) return;
+  const out = v.warn ? { additionalContext: v.reason } : { permissionDecision: v.decision, permissionDecisionReason: v.reason };
+  say(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', ...out } }));
+}
+
+function hookPreTool(input, host) {
+  const call = toolCall(input);
+  const cwd = realish(input.cwd || input.workspace_roots?.[0] || process.cwd());
+  respond(host, input.hook_event_name, call.command !== undefined ? judgeShell(call.command, cwd) : judgeFiles(call.files, call.text, cwd));
 }
 
 function hookPostTool(input) {
@@ -1122,22 +1179,23 @@ function hookPostTool(input) {
   }
 }
 
-function hookStop(input) {
-  if (input.stop_hook_active) return;
-  const root = findRoot(input.cwd || process.cwd());
-  if (!root) return;
-  const cfg = loadConfig(root);
-  if (cfg.enforce === 'off') return;
-  const state = loadState(root);
-  if (state.phase === 'idle') return;
+function hookStop(input, host) {
+  const reply = (reason) => {
+    if (host === 'cursor') say(JSON.stringify(reason ? { followup_message: reason } : {}));
+    else if (reason) say(JSON.stringify({ decision: 'block', reason }));
+  };
+  if (host === 'cursor' ? input.loop_count > 0 : input.stop_hook_active) return reply(null);
+  const root = findRoot(input.cwd || input.workspace_roots?.[0] || process.cwd());
+  const cfg = root && loadConfig(root);
+  const state = root && loadState(root);
+  if (!root || cfg.enforce === 'off' || state.phase === 'idle') return reply(null);
   let tree;
-  try { tree = snapshot(root, cfg); } catch { return; }
-  if (tree === state.verifiedTree) return;
-  say(JSON.stringify({ decision: 'block', reason: `[gw] ${STOP_BECAUSE[state.phase]}` }));
+  try { tree = snapshot(root, cfg); } catch { return reply(null); }
+  reply(tree === state.verifiedTree ? null : `[gw] ${STOP_BECAUSE[state.phase]}`);
 }
 
-function hookSessionStart(input) {
-  const root = findRoot(input.cwd || process.cwd());
+function hookSessionStart(input, host) {
+  const root = findRoot(input.cwd || input.workspace_roots?.[0] || process.cwd());
   if (!root) return;
   const s = statusOf({ root, cfg: loadConfig(root), state: loadState(root) });
   const P = PHASE[s.phase];
@@ -1148,8 +1206,8 @@ function hookSessionStart(input) {
   if (s.work) lines.push(`Work item: ${s.work} (${s.type})`);
   if (s.cycle) lines.push(`Cycle: ${s.cycle.id} · ${s.cycle.req} · ${s.cycle.behavior}`);
   if (s.chore) lines.push(`Chore: ${s.chore.id} · ${s.chore.reason}`);
-  lines.push(`Next: ${s.next}`, 'Rule: no behavior change without a check first observed failing. Tests freeze at red; change the code, not the test. See .harness/CLAUDE.md.');
-  say(lines.join('\n'));
+  lines.push(`Next: ${s.next}`, 'Rule: no behavior change without a check first observed failing. Tests freeze at red; change the code, not the test. See .harness/RULES.md.');
+  say(host === 'cursor' ? JSON.stringify({ additional_context: lines.join('\n') }) : lines.join('\n'));
 }
 
 function hookStatusline(input) {
@@ -1188,14 +1246,16 @@ function readStdin() {
 function main() {
   const [name = 'status', ...rest] = process.argv.slice(2);
   if (name === 'hook') {
+    const [event] = rest;
+    const host = rest.includes('--host') ? rest[rest.indexOf('--host') + 1] : 'claude';
+    const input = readStdin();
     try {
-      HOOKS[rest[0]]?.(readStdin());
+      HOOKS[event]?.(input, host);
     } catch (e) {
       // The edit guard fails closed: a broken guard must not wave edits through.
       // Every other hook fails open so a bug never traps the session.
-      if (rest[0] === 'pre-tool') {
-        say(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: `⛔ [gw] The edit guard failed: ${e.message}\nFix it (or set "enforce": "off" in ${CONFIG} yourself) before editing.` } }));
-      } else process.stderr.write(`[gw hook ${rest[0]}] ${e.message}\n`);
+      if (event === 'pre-tool') respond(host, input.hook_event_name, { decision: 'deny', hard: true, reason: `⛔ [gw] The edit guard failed: ${e.message}\nFix it (or set "enforce": "off" in ${CONFIG} yourself) before editing.` });
+      else process.stderr.write(`[gw hook ${event}] ${e.message}\n`);
     }
     return;
   }

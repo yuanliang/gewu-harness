@@ -77,8 +77,8 @@ export class Project {
   gw(...args) {
     return run(process.execPath, [this.path('.harness/gw.mjs'), ...args], { cwd: this.dir });
   }
-  hook(event, input = {}) {
-    const r = run(process.execPath, [this.path('.harness/gw.mjs'), 'hook', event], {
+  hook(event, input = {}, host) {
+    const r = run(process.execPath, [this.path('.harness/gw.mjs'), 'hook', event, ...(host ? ['--host', host] : [])], {
       cwd: this.dir,
       input: JSON.stringify({ cwd: this.dir, ...input }),
     });
