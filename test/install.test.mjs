@@ -10,7 +10,10 @@ function repo(files = {}) {
   for (const [rel, content] of Object.entries(files)) p.write(rel, content);
   return p;
 }
-const install = (p, ...args) => run(process.execPath, [INSTALL, ...args, p.dir], { env: { ...process.env, LANG: 'en_US.UTF-8' } });
+// LC_ALL and LC_MESSAGES outrank LANG (CI machines often set LC_ALL), so tests pin all three.
+const { LC_ALL, LC_MESSAGES, ...baseEnv } = process.env;
+const locale = (lang) => ({ ...baseEnv, LANG: lang });
+const install = (p, ...args) => run(process.execPath, [INSTALL, ...args, p.dir], { env: locale('en_US.UTF-8') });
 const ok = (r) => assert.equal(r.code, 0, r.out);
 const json = (p, rel) => JSON.parse(p.read(rel));
 const gwHandlers = (settings, event) =>
@@ -38,7 +41,7 @@ test('installs every layer of the harness', () => {
 
 test('document language follows the system locale unless chosen explicitly', () => {
   const zh = repo();
-  ok(run(process.execPath, [INSTALL, zh.dir], { env: { ...process.env, LANG: 'zh_CN.UTF-8' } }));
+  ok(run(process.execPath, [INSTALL, zh.dir], { env: locale('zh_CN.UTF-8') }));
   assert.equal(json(zh, '.harness/config.json').language, 'zh-CN');
   const en = repo();
   ok(install(en));
