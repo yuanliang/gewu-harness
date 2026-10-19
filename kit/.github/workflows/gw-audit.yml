@@ -1,0 +1,31 @@
+# Gewu Harness CI gate: green at HEAD, and every red re-proven from git history.
+name: gw audit
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # replay needs every [red] commit
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Install your project's dependencies so the suite can run. If they live outside git
+      # (node_modules, .venv), also set "replaySetup" in .harness/config.json, for example "npm ci",
+      # so each replayed commit gets them too.
+      # - run: npm ci
+
+      - name: Green at HEAD
+        run: .harness/gw check
+
+      - name: Evidence audit and replay of every red
+        run: .harness/gw audit --base "origin/${{ github.base_ref }}" --replay

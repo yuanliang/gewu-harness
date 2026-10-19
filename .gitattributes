@@ -1,0 +1,4 @@
+# Shell shims and hook commands must keep LF endings on every platform.
+* text=auto eol=lf
+*.png binary
+*.zip binary

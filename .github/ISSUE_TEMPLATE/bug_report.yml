@@ -1,0 +1,46 @@
+name: Bug report
+description: Something in the harness behaves differently from what it promises.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Security problems go through the Security tab instead (see SECURITY.md).
+        中文也可以。
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Include the exact `gw` output or hook message, with its error code if there is one (for example `E_TAMPER`).
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The smallest repository and the sequence of `gw` commands or prompts that shows the problem.
+      placeholder: |
+        1. node install.mjs /tmp/demo
+        2. .harness/gw start R1 "..." --expect "..."
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `.harness/gw doctor --run`
+      render: text
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Gewu version, Node.js, Git, OS, and the host with its version (Claude Code / Codex / other).
+      placeholder: gewu 0.5.0 · node 22.11 · git 2.47 · macOS 15 · Claude Code 2.1.x
+    validations:
+      required: true

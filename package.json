@@ -1,0 +1,36 @@
+{
+  "name": "gewu-harness",
+  "version": "0.6.0",
+  "description": "A lean Claude Code harness for every project: follow the SDLC loop and prove every change red before green. 格物致知",
+  "keywords": [
+    "claude-code",
+    "ai-agents",
+    "tdd",
+    "red-green",
+    "harness",
+    "hooks",
+    "sdlc",
+    "verification"
+  ],
+  "homepage": "https://github.com/yuanliang/gewu-harness#readme",
+  "bugs": {
+    "url": "https://github.com/yuanliang/gewu-harness/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yuanliang/gewu-harness.git"
+  },
+  "license": "MIT",
+  "author": "yuanliang (https://github.com/yuanliang)",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "gewu-install": "install.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

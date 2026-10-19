@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/yuanliang/gewu-harness/discussions
+    about: Questions, ideas and show-and-tell go to Discussions. 提问和交流请到 Discussions。
+  - name: Report a security vulnerability
+    url: https://github.com/yuanliang/gewu-harness/security/advisories/new
+    about: Please report security problems privately, not as public issues.

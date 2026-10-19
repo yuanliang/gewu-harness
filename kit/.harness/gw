@@ -1,0 +1,3 @@
+#!/bin/sh
+# Gewu Harness CLI. Verification first: red before green.
+exec node "$(dirname "$0")/gw.mjs" "$@"
