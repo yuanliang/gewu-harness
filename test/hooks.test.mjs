@@ -160,14 +160,18 @@ test('settings ask before external actions and gate decisions, even in bypass mo
   const ask = JSON.parse(p.read('.claude/settings.json')).permissions.ask;
   for (const rule of [
     'Bash(git push)', 'Bash(git push *)', 'Bash(gh pr merge *)', 'Bash(npm publish *)',
+    'Bash(pnpm publish)', 'Bash(pnpm publish *)', 'Bash(yarn npm publish)', 'Bash(yarn npm publish *)',
     'Bash(.harness/gw chore *)', 'Bash(.harness/gw approve *)', 'Edit(/.harness/**)', 'Edit(/.claude/settings.json)', 'Edit(/REVIEW.md)',
   ]) assert.ok(ask.includes(rule), rule);
 });
 
 test('bash: delivery actions ask the user', () => {
   const p = inPhase('idle');
-  for (const cmd of ['git push origin main', 'gh pr merge 3 --squash', 'npm publish']) assert.equal(p.bash(cmd).decision, 'ask', cmd);
-  assert.equal(p.bash('git pull origin main').decision, 'allow');
+  for (const cmd of [
+    'git push origin main', 'git -C . push origin main', 'git -c user.name=ci push', 'git --no-pager push',
+    '/usr/bin/git -C . push', 'gh pr merge 3 --squash', 'npm publish', 'pnpm publish --access public', 'yarn npm publish',
+  ]) assert.equal(p.bash(cmd).decision, 'ask', cmd);
+  for (const cmd of ['git pull origin main', 'git -C . status', 'pnpm test', 'yarn test']) assert.equal(p.bash(cmd).decision, 'allow', cmd);
 });
 
 // ── Codex: Claude's hook protocol, but edits arrive as apply_patch text and "ask" does not exist.
@@ -243,6 +247,31 @@ test('stop: idle never blocks', () => {
   const p = inPhase('idle');
   p.write('docs/notes.md', 'hi');
   assert.equal(p.hook('stop', { stop_hook_active: false }).json, null);
+});
+
+test('stop: a failed red, green, check or done does not count as proof', () => {
+  const stillBlocked = (p, command, reason) => {
+    assert.equal(p.hook('stop', { stop_hook_active: false }).json?.decision, 'block', 'before');
+    assert.notEqual(p.gw(...command).code, 0, command.join(' '));
+    const after = p.hook('stop', { stop_hook_active: false });
+    assert.equal(after.json?.decision, 'block', command.join(' '));
+    assert.match(after.json.reason, reason);
+  };
+  const passing = inPhase('test');
+  passing.write('test/mul.test.mjs', "import { test } from 'node:test';\ntest('passes', () => {});\n");
+  stillBlocked(passing, ['red'], /gw red/);
+
+  const stillRed = inPhase('impl');
+  stillRed.write('src/math.mjs', 'export const add = (a, b) => a + b;\nexport const mul = () => 0;\n');
+  stillBlocked(stillRed, ['green'], /gw green/);
+
+  const checking = inPhase('test');
+  checking.write('test/mul.test.mjs', MUL_TEST);
+  stillBlocked(checking, ['check'], /gw red/);
+
+  const chore = inPhase('chore');
+  chore.write('src/math.mjs', 'export const add = () => 0;\n');
+  stillBlocked(chore, ['done'], /gw done/);
 });
 
 test('session start injects the loop status and the next step', () => {

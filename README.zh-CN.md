@@ -29,13 +29,13 @@ AI 写代码的速度早已超过人验证的速度。常见的问题不是代�
 - **先红后绿**：新的验证必须先按你预测的原因失败，实现才会解锁。
 - **红之后测试冻结**：只能改代码，不能改测试。测试本身写错了，要显式 `reopen` 并记录在案。
 - **证明是算出来的**：`gw` 自己运行检查，每一步对工作区做快照，提交 `[red]` 和 `[green]`，CI 再从历史中重放每一个红。
-- **人来决定**：意图、规格、计划由你批准；没有你，任何智能体都不能推送、开 PR、合并或发布。
+- **人来决定**：意图、规格、计划由你批准。默认的 `warn` 只提醒智能体文档缺失或批准后又被改过；把 `gates` 设为 `strict` 后，`start` 会拒绝。没有你，任何智能体都不能推送、开 PR、合并或发布。
 
 ## 快速开始
 
 **环境要求**
 
-- macOS 或 Linux。Windows 请使用 [WSL](https://learn.microsoft.com/windows/wsl/)，因为检查命令通过 `/bin/sh` 执行。
+- macOS 或 Linux。Windows 请使用 [WSL](https://learn.microsoft.com/windows/wsl/)。有 bash 时，检查命令在开启了 `pipefail` 的 bash 里执行，否则用 `/bin/sh`，这样管道里前面的命令失败就不会被当成绿。
 - Node.js 18 或更高版本，以及 Git。
 - 一个智能体。Claude Code 需要 2.1.295 或更高版本：它的编辑守卫依赖 hooks 的 `onFailure` 设置，这个设置从该版本开始提供。Codex 和 Cursor 需要支持 hooks 的版本（见[智能体](#智能体)）。
 
@@ -90,7 +90,7 @@ git commit -m "chore: install Gewu Harness"
 | 交付 | `gw-review` → `gw-ship` | 按 `REVIEW.md` 的独立评审；PR 草稿 | 每次推送、PR、合并由你批准 |
 | 维护 | `gw-incident` | 失败的复现测试、一条教训、新的意图 | |
 
-流程随任务大小伸缩：bug 只需批准意图，`quick` 类型不需要任何文档。不确定下一步？让智能体执行 `gw-next`（在 Claude Code 中输入 `/gw-next`）。
+流程随任务大小伸缩：bug 只需批准意图，`quick` 类型不需要任何文档。默认的 `gates: warn` 下，没批准只是提醒，而且没有工作项时 `start` 会自动建一个 quick。`gates: strict` 会拒绝这样做：工作项必须你自己建，包括要跳过文档时用 `gw new "<标题>" --type quick`。不确定下一步？让智能体执行 `gw-next`（在 Claude Code 中输入 `/gw-next`）。
 
 ### 一个循环
 
@@ -148,7 +148,7 @@ hooks 会在智能体的每一条写入路径上强制这些锁：编辑工具�
 | `hosts` | 全部 | 要接入的智能体：`claude`、`codex`、`cursor`。用 `install.mjs --hosts` 修改 |
 | `language` | 取自系统语言 | 工作项模板的语言：`en` 或 `zh-CN` |
 | `enforce` | `strict` | `strict` 拦截；`warn` 只提醒智能体；`off` 关闭 hooks |
-| `gates` | `warn` | `strict` 时，`start` 要求所需文档已批准且未改动 |
+| `gates` | `warn` | 默认的 `warn` 只提醒，不会拦住 `start`。`strict` 要求先有明确的工作项，且所需文档已批准、批准后未改动。`off` 跳过这项检查。`strict` 下不会自动建 quick 工作项 |
 | `commit` | `true` | 只提交本循环涉及的文件，形成 `[red]` / `[green]` 提交 |
 | `replaySetup` | `null` | 为每个重放用的 worktree 做准备，例如 `npm ci`；依赖不在 git 中时必须设置。`$GW_ROOT` 指向你的检出目录，可以借它复用缓存，例如 `ln -s "$GW_ROOT/target" target` |
 | `postEdit` | `null` | Claude Code：每次编辑后运行，例如 `npx prettier --write {file}` |

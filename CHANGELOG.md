@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- A failed `red`, `green`, `check` or `done` no longer marks the working tree as verified, so the stop hook keeps asking for proof.
+- `gates: strict` no longer starts a cycle by silently creating a `quick` work item. Create one explicitly with `gw new --type quick`. The default `gates: warn` only reminds; it does not block.
+- Checks run with `pipefail`, so a failing command earlier in a pipeline is not green.
+- Delivery guards understand git's global options (`git -C . push`) and treat `pnpm publish` and `yarn npm publish` like `npm publish`.
+- The CI workflow seeded into projects installs Node dependencies, reuses them when replaying reds, and uses the same GitHub Actions major versions as this repository.
+
 ## [0.7.0] - 2026-10-19
 
 Any coding agent can now use the harness. The rules, the stage playbooks and the evidence are shared; the real-time guards speak each agent's hook protocol.

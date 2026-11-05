@@ -27,7 +27,11 @@
       "Bash(gh pr merge *)",
       "Bash(gh release create *)",
       "Bash(npm publish)",
-      "Bash(npm publish *)"
+      "Bash(npm publish *)",
+      "Bash(pnpm publish)",
+      "Bash(pnpm publish *)",
+      "Bash(yarn npm publish)",
+      "Bash(yarn npm publish *)"
     ]
   },
   "hooks": {

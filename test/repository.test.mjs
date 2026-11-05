@@ -133,3 +133,23 @@ test('CI exercises the oldest Node version the package claims to support', () =>
   const ci = read('.github/workflows/ci.yml');
   assert.match(ci, new RegExp(`node: \\[${min}[,\\]]`), `CI matrix should start at Node ${min}`);
 });
+
+test('the seeded audit workflow installs dependencies and matches this repo action versions', () => {
+  const seeded = read('kit/.github/workflows/gw-audit.yml');
+  const own = read('.github/workflows/ci.yml');
+  const major = (yml, action) => yml.match(new RegExp(`uses: ${action.replace('/', '\\/')}@v(\\d+)`))?.[1];
+  for (const action of ['actions/checkout', 'actions/setup-node']) {
+    assert.ok(major(own, action), action);
+    assert.equal(major(seeded, action), major(own, action), action);
+  }
+  assert.match(seeded, /^\s+npm ci$/m);
+  assert.doesNotMatch(seeded, /^\s*#.*\bnpm ci\b/m);
+  assert.match(seeded, /pnpm install --frozen-lockfile/);
+  assert.match(seeded, /GW_ROOT/);
+  assert.match(seeded, /github\.base_ref/);
+});
+
+test('both READMEs say the default document gate only reminds', () => {
+  assert.match(read('README.md'), /default `warn` only reminds/);
+  assert.match(read('README.zh-CN.md'), /默认的 `warn` 只提醒/);
+});
