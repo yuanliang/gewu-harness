@@ -29,13 +29,13 @@ Agents write code faster than anyone can verify it. The usual failure is not bad
 - **Red before green.** A new check must fail, for the reason you predicted, before implementation unlocks.
 - **Tests freeze at red.** After red the agent changes code, not tests. Fixing a wrong test is an explicit, recorded `reopen`.
 - **Proof is computed.** `gw` runs the checks itself, snapshots the tree between steps, commits `[red]` and `[green]`, and CI replays every red from history.
-- **Humans decide.** You approve the intent, spec and plan, and no agent pushes, opens a PR, merges or releases without you.
+- **Humans decide.** You approve the intent, spec and plan. The default `warn` only reminds the agent when a document is missing or was edited after approval; set `gates` to `strict` to make `start` refuse. No agent pushes, opens a PR, merges or releases without you.
 
 ## Quick start
 
 **Requirements**
 
-- macOS or Linux. On Windows, use [WSL](https://learn.microsoft.com/windows/wsl/), because checks run through `/bin/sh`.
+- macOS or Linux. On Windows, use [WSL](https://learn.microsoft.com/windows/wsl/). Checks run in `bash` with `pipefail` when bash is available, and in `/bin/sh` otherwise, so a failing command in a pipeline is not green.
 - Node.js 18 or newer, and Git.
 - An agent. Claude Code needs 2.1.295 or later: its edit guard relies on the hooks' `onFailure` setting, added in that version. Codex and Cursor need a release with hooks (see [Agents](#agents)).
 
@@ -90,7 +90,7 @@ Whatever the agent, the evidence is the same: `gw` runs every check itself, and 
 | Deploy | `gw-review` → `gw-ship` | independent review against `REVIEW.md`; PR draft | you approve each push / PR / merge |
 | Maintain | `gw-incident` | a failing reproduction, a lesson, a new intent | |
 
-Work scales with its size: a bug needs only an approved intent, and a `quick` item needs none. Not sure what comes next? Ask the agent for `gw-next` (in Claude Code, `/gw-next`).
+Work scales with its size: a bug needs only an approved intent, and a `quick` item needs none. With the default `gates: warn`, a missing approval is only a reminder, and `start` with no work item opens a quick one for you. `gates: strict` refuses that: create the item yourself, including `gw new "<title>" --type quick` when you mean to skip the documents. Not sure what comes next? Ask the agent for `gw-next` (in Claude Code, `/gw-next`).
 
 ### One cycle
 
@@ -148,7 +148,7 @@ Errors carry a stable code (`E_NOT_RED`, `E_WRONG_REASON`, `E_TAMPER`, `E_REGRES
 | `hosts` | all | Agents to wire up: `claude`, `codex`, `cursor`. Change with `install.mjs --hosts` |
 | `language` | from your locale | Language of the work-item templates: `en` or `zh-CN` |
 | `enforce` | `strict` | `strict` blocks; `warn` only tells the agent; `off` disables the hooks |
-| `gates` | `warn` | `strict` makes `start` require approved, unchanged documents |
+| `gates` | `warn` | The default `warn` only reminds; it does not block `start`. `strict` requires an explicit work item plus approved, unchanged documents. `off` skips the check. A quick item is never created for you under `strict` |
 | `commit` | `true` | Make `[red]` / `[green]` commits of exactly the cycle's files |
 | `replaySetup` | `null` | Prepares each replay worktree, for example `npm ci`; required when dependencies live outside git. `$GW_ROOT` is your checkout, so setup can reuse caches, for example `ln -s "$GW_ROOT/target" target` |
 | `postEdit` | `null` | Claude Code: run after each edit, for example `npx prettier --write {file}` |

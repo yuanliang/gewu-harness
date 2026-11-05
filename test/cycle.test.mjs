@@ -35,6 +35,26 @@ test('start without an active work item creates a quick one', () => {
   assert.equal(p.state().phase, 'test');
   assert.ok(p.work);
   assert.equal(p.ledger()[0].ev, 'start');
+  assert.match(p.read(`docs/work/${p.work}/intent.md`), /^type: quick$/m);
+});
+
+test('strict gates refuse start until a work item exists, including an explicit quick one', () => {
+  const p = project({ config: { gates: 'strict' } });
+  const r = p.gw('start', 'R1', 'mul multiplies', ...CHECK);
+  refused(r, 'E_GATE');
+  assert.match(r.out, /--type quick/);
+  assert.equal(p.state().phase, 'idle');
+  assert.ok(!p.state().work);
+  ok(p.gw('new', 'Tiny fix', '--type', 'quick'));
+  ok(p.gw('start', 'R1', 'mul multiplies', ...CHECK));
+  assert.equal(p.state().phase, 'test');
+});
+
+test('a pipeline is not green when an earlier command fails', () => {
+  const p = project({ config: { verify: 'false | true' } });
+  const r = p.gw('check');
+  refused(r, 'E_NOT_GREEN');
+  assert.doesNotMatch(r.out, /Illegal option|pipefail/);
 });
 
 test('start is refused while a cycle is open', () => {

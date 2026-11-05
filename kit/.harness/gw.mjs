@@ -230,9 +230,20 @@ function changed(root, a, b) {
   return git(root, ['diff-tree', '-r', '-z', '--name-only', '--no-renames', a, b]).split('\0').filter(Boolean);
 }
 
+// bash -o pipefail when bash exists. /bin/sh is often dash, which may lack pipefail,
+// and a pipeline would then go green because only the last command's status counts.
+let checkShell = null;
+function shellForCheck() {
+  if (checkShell) return checkShell;
+  const bash = spawnSync('bash', ['-c', 'exit 0'], { encoding: 'utf8' });
+  checkShell = bash.status === 0 ? ['bash', '-o', 'pipefail', '-c'] : ['/bin/sh', '-c'];
+  return checkShell;
+}
+
 function runCheck(cwd, cfg, cmd, env = {}) {
   const t0 = Date.now();
-  const r = spawnSync('/bin/sh', ['-c', `{ ${cmd}\n} 2>&1`], {
+  const [bin, ...prelude] = shellForCheck();
+  const r = spawnSync(bin, [...prelude, `{ ${cmd}\n} 2>&1`], {
     cwd,
     encoding: 'utf8',
     maxBuffer: 256 * 1024 * 1024,
@@ -547,7 +558,14 @@ const commands = {
     if (!req || !behavior) fail('E_USAGE', `Usage: ${GW} start <R#> "<behavior>" [--check "<targeted test command>"] [--expect "<predicted failure>"]`);
     needPhase(ctx, ['idle']);
     const { root, cfg, state } = ctx;
-    const gaps = state.work && cfg.gates !== 'off' && fs.existsSync(workDir(root, cfg, state.work)) ? gateProblems(root, cfg, state.work) : [];
+    const hasWork = state.work && fs.existsSync(workDir(root, cfg, state.work));
+    if (cfg.gates === 'strict' && !hasWork) {
+      fail('E_GATE', `Strict gates need an explicit work item before a cycle starts.
+Create one first: ${GW} new "<title>" [--type feature|bug|incident|quick]
+A quick item is opt-in and skips intent, spec and plan: ${GW} new "<title>" --type quick
+Then approve the documents that type requires, and run start again.`);
+    }
+    const gaps = hasWork && cfg.gates !== 'off' ? gateProblems(root, cfg, state.work) : [];
     if (gaps.length && cfg.gates === 'strict') fail('E_GATE', `Human gate not passed:\n  - ${gaps.join('\n  - ')}\nShow the document to the user; they approve it by running: ${GW} approve <intent|spec|plan>`);
     let baseline = null;
     if (!opt.check) {
@@ -580,8 +598,6 @@ If an existing failing test already describes this behavior, adopt it explicitly
     }
     const cmd = checkCmd(cfg, c);
     const res = runCheck(root, cfg, cmd);
-    state.verifiedTree = tree;
-    saveState(root, state);
     printRun(res);
     refuse(res, res.exit === 0, 'E_NOT_RED', 'The check passed, so this is not red. The new test does not catch the missing behavior: strengthen the assertion, or confirm the behavior already exists.');
     const matched = c.expect ? res.out.includes(c.expect) : null;
@@ -590,7 +606,7 @@ If an existing failing test already describes this behavior, adopt it explicitly
     const sha = !cfg.commit ? null : adopted ? cleanHead(root) : commitPaths(root, tests, `test(${c.req}): ${c.behavior} [red]`);
     append(root, cfg, state.work, { ev: 'red', cycle: c.id, cmd, exit: res.exit, ms: res.ms, tree, tests, adopted: !!adopted, expect: c.expect, matched, commit: sha, tail: tail(res.out) });
     Object.assign(c, { redTree: tree, redCommit: sha });
-    state.phase = 'impl';
+    Object.assign(state, { phase: 'impl', verifiedTree: tree });
     saveState(root, state);
     say(header(state, `  ${paint(31, `red proven (exit ${res.exit})`)}${sha ? paint(90, ` · commit ${sha.slice(0, 7)}`) : ''}`),
       `🔒 Frozen: ${tests.join(', ')}`, `Next: ${NEXT.impl()}`);
@@ -604,8 +620,6 @@ If an existing failing test already describes this behavior, adopt it explicitly
     assertUntampered(ctx, tree);
     const cmd = checkCmd(cfg, c);
     const res = runCheck(root, cfg, cmd);
-    state.verifiedTree = tree;
-    saveState(root, state);
     printRun(res, res.exit === 0 ? 8 : 25);
     refuse(res, res.exit !== 0, 'E_NOT_GREEN', 'Still red. Change the code, not the test.');
     let full = null;
@@ -616,7 +630,7 @@ If an existing failing test already describes this behavior, adopt it explicitly
     }
     append(root, cfg, state.work, { ev: 'green', cycle: c.id, cmd, exit: 0, ms: res.ms, tree, full: full && { cmd: full.cmd, exit: full.exit, ms: full.ms } });
     c.greenTree = tree;
-    state.phase = 'refactor';
+    Object.assign(state, { phase: 'refactor', verifiedTree: tree });
     saveState(root, state);
     say(header(state, `  ${paint(32, 'green proven ✓')}`), `Next: ${NEXT.refactor()}`);
   },
@@ -630,8 +644,6 @@ If an existing failing test already describes this behavior, adopt it explicitly
     if (!isChore) assertUntampered(ctx, tree);
     if (isChore || tree !== c.greenTree) {
       const res = runCheck(root, cfg, cfg.verify ?? checkCmd(cfg, c));
-      state.verifiedTree = tree;
-      saveState(root, state);
       printRun(res, 8);
       refuse(res, res.exit !== 0, 'E_NOT_GREEN', isChore ? 'The full suite fails after this chore: it changed behavior or broke something.' : 'The suite fails after refactoring. Undo or fix the refactor to stay green.');
     }
@@ -685,10 +697,10 @@ If an existing failing test already describes this behavior, adopt it explicitly
     const { root, cfg, state } = ctx;
     const tree = snapshot(root, cfg);
     const res = runCheck(root, cfg, verifyCmd(cfg));
-    state.verifiedTree = tree;
-    saveState(root, state);
     printRun(res);
     refuse(res, res.exit !== 0, 'E_NOT_GREEN', 'The full suite fails.');
+    state.verifiedTree = tree;
+    saveState(root, state);
     say(paint(32, '✓ full suite green'));
   },
 
@@ -936,7 +948,12 @@ function doctor({ root, cfg }, opt) {
 
 const PATH_KEYS = ['file_path', 'notebook_path', 'path', 'target_file', 'filePath'];
 const TEXT_KEYS = ['content', 'contents', 'new_string', 'code_edit', 'text'];
-const DELIVERY = [['git', 'push'], ['gh', 'pr', 'create'], ['gh', 'pr', 'merge'], ['gh', 'release', 'create'], ['npm', 'publish']];
+const DELIVERY = [
+  ['git', 'push'], ['gh', 'pr', 'create'], ['gh', 'pr', 'merge'], ['gh', 'release', 'create'],
+  ['npm', 'publish'], ['pnpm', 'publish'], ['yarn', 'npm', 'publish'],
+];
+// git takes global options before the subcommand: `git -C . push`, `git -c k=v push`.
+const GIT_OPT_ARG = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--super-prefix', '--config-env']);
 const NEEDS_USER = '\nThis agent cannot pause to ask, so the action is blocked: stop and ask the user to do it themselves.';
 
 // hard deny > deny > ask > a warn-mode note, so no combination can soften a hard denial.
@@ -1098,6 +1115,20 @@ function writeTargets(seg, cwd) {
   return targets;
 }
 
+function commandWords(w) {
+  if (path.basename(w[0] ?? '') !== 'git') return w;
+  const out = ['git'];
+  for (let i = 1; i < w.length; i++) {
+    const t = w[i];
+    if (t === '--') { out.push(...w.slice(i + 1)); break; }
+    if (GIT_OPT_ARG.has(t)) { i++; continue; }
+    if (t.startsWith('-')) continue; // boolean globals, and -Cpath / --git-dir=path
+    out.push(...w.slice(i));
+    break;
+  }
+  return out;
+}
+
 function gwSubcommand(w) {
   if (path.basename(w[0] ?? '') === 'gw') return w[1];
   if (path.basename(w[0] ?? '') === 'node' && path.basename(w[1] ?? '') === 'gw.mjs') return w[2];
@@ -1133,7 +1164,8 @@ function judgeShell(command, cwd) {
     const sub = gwSubcommand(w);
     if (sub === 'chore') verdict = strongest(verdict, { decision: 'ask', reason: '🛡 A chore lifts red-before-green for a non-behavioral change. The user confirms it.' });
     if (sub === 'approve') verdict = strongest(verdict, { decision: 'ask', reason: '🛡 Human gate: only the user approves intent, spec and plan.' });
-    if (DELIVERY.some((d) => d.every((x, i) => w[i] === x))) verdict = strongest(verdict, { decision: 'ask', reason: "🛡 Push, PR, merge and release are the user's decision." });
+    const spoken = commandWords(w);
+    if (DELIVERY.some((d) => d.every((x, i) => spoken[i] === x))) verdict = strongest(verdict, { decision: 'ask', reason: "🛡 Push, PR, merge and release are the user's decision." });
     for (const t of writeTargets(seg, cwd)) {
       const rel = toRel(root, realish(path.resolve(cwd, t)));
       if (!rel) continue;

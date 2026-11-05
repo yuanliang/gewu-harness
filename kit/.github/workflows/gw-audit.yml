@@ -11,18 +11,51 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # replay needs every [red] commit
 
-      - uses: actions/setup-node@v4
+      - name: Fetch the base branch
+        run: git fetch --no-tags origin "${{ github.base_ref }}"
+
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
-      # Install your project's dependencies so the suite can run. If they live outside git
-      # (node_modules, .venv), also set "replaySetup" in .harness/config.json, for example "npm ci",
-      # so each replayed commit gets them too.
-      # - run: npm ci
+      # Node dependencies, so `gw check` can run. Go, Cargo, pytest and the
+      # other detected stacks use the tools on the runner; add a setup step
+      # here when the runner does not already provide them. Dependencies that
+      # live outside git (node_modules) also have to exist in each replay
+      # worktree. The next step fills replaySetup for this job when you have
+      # not set one, by reusing this checkout's node_modules.
+      - name: Install Node dependencies
+        run: |
+          set -eu
+          if [ -f pnpm-lock.yaml ]; then
+            corepack enable
+            pnpm install --frozen-lockfile
+          elif [ -f yarn.lock ]; then
+            corepack enable
+            if [ -f .yarnrc.yml ]; then yarn install --immutable
+            else yarn install --frozen-lockfile
+            fi
+          elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            npm ci
+          elif [ -f package.json ]; then
+            npm install
+          fi
+
+      - name: Reuse installed dependencies when replaying reds
+        run: |
+          node --input-type=module <<'EOF'
+          import fs from 'node:fs';
+          const file = '.harness/config.json';
+          const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
+          if (!cfg.replaySetup && fs.existsSync('node_modules')) {
+            cfg.replaySetup = 'ln -s "$GW_ROOT/node_modules" node_modules';
+            fs.writeFileSync(file, JSON.stringify(cfg, null, 2) + '\n');
+          }
+          EOF
 
       - name: Green at HEAD
         run: .harness/gw check
